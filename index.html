@@ -1,0 +1,360 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black">
+<meta name="apple-mobile-web-app-title" content="Pause">
+<title>Pause Timer</title>
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="manifest" href="manifest.json">
+<style>
+  /* Written in plain CSS/ES5 on purpose so it runs on old iPads (iOS 9+). */
+  html, body {
+    margin: 0; padding: 0; height: 100%; width: 100%;
+    background: #000; color: #fff; overflow: hidden;
+    font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+    -webkit-user-select: none; user-select: none;
+    -webkit-tap-highlight-color: transparent;
+    -webkit-touch-callout: none;
+  }
+  .flex-center {
+    display: -webkit-box; display: -webkit-flex; display: flex;
+    -webkit-box-align: center; -webkit-align-items: center; align-items: center;
+    -webkit-box-pack: center; -webkit-justify-content: center; justify-content: center;
+    -webkit-box-orient: vertical; -webkit-flex-direction: column; flex-direction: column;
+  }
+  #stage { position: absolute; top: 0; left: 0; right: 0; bottom: 0; }
+  #time {
+    font-weight: 700; line-height: 1; letter-spacing: -0.02em;
+    -webkit-font-feature-settings: "tnum"; font-feature-settings: "tnum";
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+    -webkit-transition: color .4s; transition: color .4s;
+  }
+  #label {
+    font-size: 5vh; font-weight: 700; letter-spacing: .25em;
+    color: #777; text-transform: uppercase; margin-bottom: 1vh; height: 6vh;
+  }
+  .warn  #time, .warn  #label { color: #ffcc00; }
+  .final #time, .final #label { color: #ff7a1a; }
+  .done  #time, .done  #label { color: #ff3b30; }
+  .done  #time { -webkit-animation: blink 1s steps(2) infinite; animation: blink 1s steps(2) infinite; }
+  .paused #time { color: #8a8a8a; }
+  @-webkit-keyframes blink { 50% { opacity: .15; } }
+  @keyframes blink { 50% { opacity: .15; } }
+
+  #controls {
+    position: absolute; left: 0; right: 0; bottom: 0;
+    padding: 2vh 2vw 3vh; text-align: center;
+    background: -webkit-linear-gradient(top, rgba(0,0,0,0), rgba(0,0,0,.9) 40%);
+    background: linear-gradient(to bottom, rgba(0,0,0,0), rgba(0,0,0,.9) 40%);
+    -webkit-transition: opacity .5s; transition: opacity .5s;
+  }
+  .hidden #controls { opacity: 0; pointer-events: none; }
+  button {
+    font: inherit; font-size: 22px; font-weight: 600;
+    min-width: 76px; height: 64px; margin: 6px; padding: 0 18px;
+    border: 0; border-radius: 14px; color: #fff; background: #2a2a2a;
+    -webkit-appearance: none; cursor: pointer;
+  }
+  button:active { background: #444; }
+  #go { background: #1e9e45; min-width: 150px; }
+  #go.pause { background: #c47d00; }
+  #set { background: #2b5fd9; }
+  #hint { color: #555; font-size: 14px; margin-top: 4px; }
+
+  /* Keypad for entering a custom time, microwave-style */
+  #pad { position: absolute; top: 0; left: 0; right: 0; bottom: 0; background: #000; z-index: 10; display: none; }
+  .padopen #pad { display: -webkit-box; display: -webkit-flex; display: flex; }
+  #padTime {
+    font-size: 110px; font-weight: 700; line-height: 1; margin-bottom: 16px;
+    -webkit-font-feature-settings: "tnum"; font-feature-settings: "tnum";
+  }
+  #padTime .dim { color: #444; }
+  #padHint { color: #777; font-size: 16px; margin-bottom: 14px; }
+  #keys { width: 330px; text-align: center; }
+  #keys button { width: 96px; height: 76px; margin: 5px; padding: 0; font-size: 32px; min-width: 0; }
+  #keys #ok { background: #1e9e45; }
+  #keys #back { background: #3a3a3a; }
+  #cancel { margin-top: 10px; background: transparent; color: #aaa; }
+</style>
+</head>
+<body class="paused">
+<div id="stage" class="flex-center">
+  <div id="label"></div>
+  <div id="time">15:00</div>
+</div>
+
+<div id="controls">
+  <div>
+    <button id="set">Set time</button>
+    <button id="minus">&minus;1 min</button>
+    <button id="plus">+1 min</button>
+  </div>
+  <div>
+    <button id="go">Start</button>
+    <button id="reset">Reset</button>
+    <button id="sound">Sound: on</button>
+  </div>
+  <div id="hint">Tap the numbers to start/pause. Beeps at 5:00 and 3:00 left. Controls hide while running &mdash; tap to show.</div>
+</div>
+
+<div id="pad" class="flex-center">
+  <div id="padTime">00:00</div>
+  <div id="padHint">Type minutes then seconds &mdash; e.g. 1 2 4 5 = 12:45</div>
+  <div id="keys">
+    <button data-k="1">1</button><button data-k="2">2</button><button data-k="3">3</button><br>
+    <button data-k="4">4</button><button data-k="5">5</button><button data-k="6">6</button><br>
+    <button data-k="7">7</button><button data-k="8">8</button><button data-k="9">9</button><br>
+    <button id="back">&#9003;</button><button data-k="0">0</button><button id="ok">OK</button>
+  </div>
+  <button id="cancel">Cancel</button>
+</div>
+
+<script>
+(function () {
+  var body = document.body;
+  var timeEl = document.getElementById('time');
+  var labelEl = document.getElementById('label');
+  var goBtn = document.getElementById('go');
+  var soundBtn = document.getElementById('sound');
+  var padTimeEl = document.getElementById('padTime');
+
+  // Warnings: one short beep at 5:00 left, a stronger "final" beep at 3:00 (time to leave).
+  var WARN_AT = 5 * 60, FINAL_AT = 3 * 60;
+
+  var durationMs = 15 * 60 * 1000;
+  var remainingMs = durationMs;
+  var endAt = null;            // wall-clock end time while running
+  var lastSecs = null;         // seconds left at previous tick, to detect threshold crossings
+  var tickId = null, hideId = null;
+  var soundOn = true, audio = null;
+  var padDigits = '';
+
+  function load() {
+    try {
+      var s = parseInt(localStorage.getItem('pauseSeconds'), 10);
+      if (s > 0 && s < 100 * 60) { durationMs = remainingMs = s * 1000; }
+      soundOn = localStorage.getItem('pauseSound') !== 'off';
+    } catch (e) {}
+  }
+  function save() {
+    try {
+      localStorage.setItem('pauseSeconds', String(Math.round(durationMs / 1000)));
+      localStorage.setItem('pauseSound', soundOn ? 'on' : 'off');
+    } catch (e) {}
+  }
+
+  function fmt(ms) {
+    var s = Math.ceil(ms / 1000);
+    if (s < 0) s = 0;
+    var m = Math.floor(s / 60), r = s % 60;
+    return m + ':' + (r < 10 ? '0' : '') + r;
+  }
+
+  // Size digits to fill the screen in either orientation (no CSS min() on old Safari).
+  function fit() {
+    var w = window.innerWidth, h = window.innerHeight;
+    var chars = Math.max(timeEl.textContent.length, 5);
+    var byWidth = (w * 0.94) / (chars * 0.58);
+    var byHeight = h * 0.62;
+    timeEl.style.fontSize = Math.floor(Math.min(byWidth, byHeight)) + 'px';
+  }
+
+  function render() {
+    var ms = endAt ? endAt - Date.now() : remainingMs;
+    var txt = fmt(ms);
+    if (timeEl.textContent !== txt) {
+      var lenChanged = timeEl.textContent.length !== txt.length;
+      timeEl.textContent = txt;
+      if (lenChanged) fit();
+    }
+    var secs = Math.max(0, Math.ceil(ms / 1000));
+    var done = secs <= 0;
+
+    // Fire each warning once, only when the running clock crosses the threshold.
+    if (endAt && lastSecs !== null) {
+      if (lastSecs > FINAL_AT && secs <= FINAL_AT && secs > 0) beep(3, 1050, 0.3);
+      else if (lastSecs > WARN_AT && secs <= WARN_AT) beep(1, 700, 0.6);
+    }
+    lastSecs = endAt ? secs : null;
+
+    var cls = [], label = '';
+    if (done) { cls.push('done'); label = 'Time!'; }
+    else if (secs <= FINAL_AT) { cls.push('final'); label = 'Go to the ice'; }
+    else if (secs <= WARN_AT) { cls.push('warn'); label = '5 min warning'; }
+    if (!endAt && !done) { cls.push('paused'); label = remainingMs < durationMs ? 'Paused' : ''; }
+    if (/\bhidden\b/.test(body.className)) cls.push('hidden');
+    if (/\bpadopen\b/.test(body.className)) cls.push('padopen');
+    body.className = cls.join(' ');
+    labelEl.textContent = label;
+
+    if (done && endAt) {
+      endAt = null; remainingMs = 0; lastSecs = null;
+      stopTick(); updateGo();
+      showControls(false);
+      beep(3, 880, 0.5);
+    }
+  }
+
+  function startTick() { stopTick(); tickId = setInterval(render, 200); }
+  function stopTick() { if (tickId) { clearInterval(tickId); tickId = null; } }
+
+  function start() {
+    unlockAudio();
+    if (remainingMs <= 0) remainingMs = durationMs;
+    endAt = Date.now() + remainingMs;
+    lastSecs = Math.ceil(remainingMs / 1000);
+    startTick(); updateGo(); render();
+    scheduleHide();
+  }
+  function pause() {
+    if (!endAt) return;
+    remainingMs = Math.max(0, endAt - Date.now());
+    endAt = null;
+    stopTick(); updateGo(); render(); showControls(false);
+  }
+  function toggle() { endAt ? pause() : start(); }
+  function reset() {
+    endAt = null; remainingMs = durationMs; lastSecs = null;
+    stopTick(); updateGo(); render(); showControls(false);
+  }
+  function setDuration(secs) {
+    durationMs = secs * 1000; save();
+    reset();
+  }
+  function adjust(deltaMin) {
+    var d = deltaMin * 60000;
+    if (endAt) {
+      endAt = Math.max(Date.now() + 1000, endAt + d);
+      // Moving the clock should not fire a warning by itself.
+      lastSecs = Math.ceil((endAt - Date.now()) / 1000);
+    } else {
+      remainingMs = Math.max(1000, remainingMs + d);
+      if (remainingMs > durationMs) durationMs = remainingMs;
+    }
+    render();
+  }
+  function updateGo() {
+    goBtn.textContent = endAt ? 'Pause' : (remainingMs > 0 && remainingMs < durationMs ? 'Resume' : 'Start');
+    goBtn.className = endAt ? 'pause' : '';
+  }
+
+  function showControls(autoHide) {
+    body.className = body.className.replace(/\s*\bhidden\b/g, '');
+    if (hideId) { clearTimeout(hideId); hideId = null; }
+    if (autoHide) scheduleHide();
+  }
+  function scheduleHide() {
+    if (hideId) clearTimeout(hideId);
+    hideId = setTimeout(function () {
+      if (endAt) body.className += ' hidden';
+    }, 4000);
+  }
+
+  // --- keypad ---
+  function padSeconds() {
+    var d = ('0000' + padDigits).slice(-4);
+    return parseInt(d.slice(0, 2), 10) * 60 + parseInt(d.slice(2), 10);
+  }
+  function renderPad() {
+    var d = ('0000' + padDigits).slice(-4);
+    var typed = padDigits.length;
+    var html = '';
+    for (var i = 0; i < 4; i++) {
+      if (i === 2) html += ':';
+      html += (i < 4 - typed) ? '<span class="dim">' + d.charAt(i) + '</span>' : d.charAt(i);
+    }
+    padTimeEl.innerHTML = html;
+  }
+  function openPad() {
+    pause();
+    padDigits = '';
+    renderPad();
+    body.className += ' padopen';
+  }
+  function closePad() { body.className = body.className.replace(/\s*\bpadopen\b/g, ''); }
+
+  // Audio has to be unlocked by a user tap on iOS; we do it on Start / Sound.
+  function unlockAudio() {
+    var Ctx = window.AudioContext || window.webkitAudioContext;
+    if (!Ctx) return;
+    try {
+      if (!audio) audio = new Ctx();
+      if (audio.resume) audio.resume();
+      var b = audio.createBuffer(1, 1, 22050), s = audio.createBufferSource();
+      s.buffer = b; s.connect(audio.destination);
+      s.start ? s.start(0) : s.noteOn(0);
+    } catch (e) { audio = null; }
+  }
+  function beep(times, freq, len) {
+    if (!soundOn || !audio) return;
+    if (audio.resume) audio.resume();
+    for (var i = 0; i < times; i++) {
+      var t = audio.currentTime + 0.05 + i * (len + 0.15);
+      var o = audio.createOscillator(), g = audio.createGain();
+      o.type = 'square';
+      o.frequency.value = freq; o.connect(g); g.connect(audio.destination);
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.exponentialRampToValueAtTime(0.5, t + 0.02);
+      g.gain.setValueAtTime(0.5, t + len - 0.05);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + len);
+      o.start ? o.start(t) : o.noteOn(t);
+      o.stop ? o.stop(t + len + 0.05) : o.noteOff(t + len + 0.05);
+    }
+  }
+  function updateSound() { soundBtn.textContent = 'Sound: ' + (soundOn ? 'on' : 'off'); }
+
+  // --- wiring ---
+  function onTap(el, fn) {
+    el.addEventListener('click', function (e) { e.stopPropagation(); fn(e); });
+  }
+  function onCtl(el, fn) { onTap(el, function (e) { fn(e); showControls(!!endAt); }); }
+
+  onCtl(document.getElementById('set'), openPad);
+  onCtl(document.getElementById('minus'), function () { adjust(-1); });
+  onCtl(document.getElementById('plus'), function () { adjust(1); });
+  onCtl(goBtn, toggle);
+  onCtl(document.getElementById('reset'), reset);
+  onCtl(soundBtn, function () { soundOn = !soundOn; save(); updateSound(); unlockAudio(); if (soundOn) beep(1, 700, 0.2); });
+  onCtl(timeEl, toggle);
+  document.getElementById('stage').addEventListener('click', function () { showControls(!!endAt); });
+
+  var keys = document.querySelectorAll('[data-k]');
+  for (var i = 0; i < keys.length; i++) {
+    (function (k) {
+      onTap(k, function () {
+        if (padDigits.length >= 4) return;
+        if (padDigits === '' && k.getAttribute('data-k') === '0') return;
+        padDigits += k.getAttribute('data-k');
+        renderPad();
+      });
+    })(keys[i]);
+  }
+  onTap(document.getElementById('back'), function () { padDigits = padDigits.slice(0, -1); renderPad(); });
+  onTap(document.getElementById('ok'), function () {
+    var s = padSeconds();
+    if (s <= 0) return;
+    closePad();
+    setDuration(s);
+  });
+  onTap(document.getElementById('cancel'), closePad);
+
+  // Recompute after the iPad wakes or the tab comes back (timers are throttled when hidden).
+  document.addEventListener('visibilitychange', render);
+  window.addEventListener('resize', fit);
+  window.addEventListener('orientationchange', function () { setTimeout(fit, 300); });
+
+  if ('serviceWorker' in navigator && location.protocol === 'https:') {
+    navigator.serviceWorker.register('sw.js').catch(function () {});
+  }
+
+  load();
+  updateSound(); updateGo(); render(); fit();
+})();
+</script>
+</body>
+</html>
